@@ -8,6 +8,7 @@ from MoConVQCore.Utils.misc import *
 import psutil
 import MoConVQCore.Utils.pytorch_utils as ptu
 from MoConVQCore.Utils.motion_dataset import MotionDataSet
+from MoConVQCore.Utils import motion_utils
 
 import os
 
@@ -93,13 +94,14 @@ if __name__ == "__main__":
     agent = MoConVQ(323, 12, 57, 120,env, training=False, **model_args)
     
     motion_data = MotionDataSet(20)
+    target_setters = []
     
     for fn in args['bvh-file']:
         if args['is_bvh_folder']:
-            motion_data.add_folder_bvh(fn, env.sim_character)
+            target_setters.extend(motion_data.add_folder_bvh(fn, env.sim_character))
         else:            
             flip = args['flip_bvh']
-            motion_data.add_bvh_with_character(fn, env.sim_character, flip=flip)
+            target_setters.append(motion_data.add_bvh_with_character(fn, env.sim_character, flip=flip))
             
     agent.simple_load(r'moconvq_base.data', strict=True)
     agent.eval()
@@ -111,7 +113,11 @@ if __name__ == "__main__":
     saver = CharacterToBVH(agent.env.sim_character, 120)
     saver.bvh_hierarchy_no_root()
     
-    observation, info = agent.env.reset(0)
+    _, target_setter, target_offset = target_setters[0]
+    target_setter.set_character_byframe(0)    
+    env.sim_character.move_character_by_delta(target_offset)
+        
+    observation, info = agent.env.reset(0, set_state=False)
     
     period = 1000000
     

@@ -56,23 +56,25 @@ class MotionDataSet():
     
     def add_bvh_with_character(self, name, character, flip = False):
         if flip:
-            target = BVHToTargetBase(name, self.fps, character, flip = np.array([1,0,0])).init_target()
+            bvh_target_base = BVHToTargetBase(name, self.fps, character, flip = np.array([1,0,0]))
         else:
-            target = BVHToTargetBase(name, self.fps, character).init_target()
-        tarset : SetTargetToCharacter = SetTargetToCharacter(character, target)
+            bvh_target_base = BVHToTargetBase(name, self.fps, character)
+            
+        target = bvh_target_base.init_target()        
+        target_setter : SetTargetToCharacter = SetTargetToCharacter(character, target)
 
         state, ob, done = [],[],[] 
         
         offset = np.zeros(3)
         for i in range(10):
-            tarset.set_character_byframe(i)
+            target_setter.set_character_byframe(i)
             aabb = character.get_aabb()
             offset += np.array([0,-aabb[2]+1e-3,0])
         offset /= 10
         # offset[1] -= 0.05
         
         for i in range(target.num_frames):
-            tarset.set_character_byframe(i)
+            target_setter.set_character_byframe(i)
             character.move_character_by_delta(offset)
             state_tmp = character_state(character)
             ob_tmp =  state2ob(torch.from_numpy(state_tmp)).numpy()
@@ -88,6 +90,8 @@ class MotionDataSet():
         self.observation = add_to_list(ob, self.observation)
         self.done = add_to_list(done, self.done)
         self.future = add_to_list(future, self.future)
+        
+        return target, target_setter, offset
          
     def add_folder_bvh(self, name, character, mirror_augment = True):
         """Add every bvh in a forlder into motion dataset
@@ -97,16 +101,21 @@ class MotionDataSet():
             character (ODECharacter): the character of ode
             mirror_augment (bool, optional): whether to use mirror augment. Defaults to True.
         """                
+        target_setters = []
         for file in os.listdir(name):
             if '.bvh' in file:
                 print(f'add {file}')
-                self.add_bvh_with_character(os.path.join(name, file), character)
+                target_setter = self.add_bvh_with_character(os.path.join(name, file), character)
+                target_setters.append(target_setter)
         if mirror_augment:
             for file in os.listdir(name):
                 if '.bvh' in file:
                     print(f'add {file} flip')
-                    self.add_bvh_with_character(os.path.join(name, file), character, flip = True)
-    
+                    target_setter = self.add_bvh_with_character(os.path.join(name, file), character, flip = True)
+                    target_setters.append(target_setter)
+                    
+        return target_setters
+
 import h5py
 class HDF5MotionDataset():
     '''
